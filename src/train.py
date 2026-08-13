@@ -6,6 +6,10 @@ from dataset import IMDBDataset
 from torch.utils.data import DataLoader
 from torch.optim import AdamW
 from model import BertClassifier
+import os
+
+# pyrefly: ignore [missing-import]
+from google.colab import files
 
 raw_train = load_dataset("stanfordnlp/imdb", split="train")
 test_dataset = load_dataset("stanfordnlp/imdb", split="test")
@@ -32,6 +36,8 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model = BertClassifier().to(device)
 optimizer = AdamW(model.parameters(), lr=2e-5)
 
+
+os.makedirs("checkpoints", exist_ok=True)
 best_val_loss = float("inf")
 for epoch in range(EPOCHS):
     total_train_loss = 0
@@ -77,3 +83,6 @@ for epoch in range(EPOCHS):
     if avg_val_loss < best_val_loss:
         best_val_loss = avg_val_loss
         torch.save(model.state_dict(), "checkpoints/best_model.pt")
+
+
+files.download("checkpoints/best_model.pt")
