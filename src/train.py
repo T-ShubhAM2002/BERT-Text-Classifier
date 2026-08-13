@@ -24,23 +24,56 @@ train_loader = DataLoader(train_data, batch_size=16, shuffle=True)
 val_loader = DataLoader(val_data, batch_size=16, shuffle=False)
 test_loader = DataLoader(test_data, batch_size=16, shuffle=False)
 
-model = BertClassifier()
 loss_func = nn.CrossEntropyLoss()
-optimizer = AdamW(model.parameters(), lr=2e-5)
 
 EPOCHS = 5
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model.to(device)
+model = BertClassifier().to(device)
+optimizer = AdamW(model.parameters(), lr=2e-5)
 
+best_val_loss = float("inf")
 for epoch in range(EPOCHS):
-    loss = 0
-    total_loss = 0
+    total_train_loss = 0
+
     model.train()
     for batch in train_loader:
         optimizer.zero_grad()
-        output = model(batch["input_ids"], attention_mask=batch["attention_mask"])
-        loss = loss_func(output, batch["label"])
+        output = model(
+            batch["input_ids"].to(device),
+            attention_mask=batch["attention_mask"].to(device),
+        )
+        loss = loss_func(output, batch["label"].to(device))
+        loss.backward()
         optimizer.step()
-        total_loss += loss.item()
-    print(f"Epochs: {epoch+1} and training loss = {total_loss/len(train_loader)}")
+        total_train_loss += loss.item()
+    avg_train_loss = total_train_loss / len(train_loader)
+    print(f"Epochs: {epoch+1}/{EPOCHS} and avg. training loss = {avg_train_loss:.2f}")
+
+    model.eval()
+    total_val_loss = 0
+    correct_preds = 0
+    total = 0
+    with torch.no_grad():
+        for batch in val_loader:
+            label = batch["label"].to(device)
+            output = model(
+                batch["input_ids"].to(device),
+                attention_mask=batch["attention_mask"].to(device),
+            )
+            loss = loss_func(output, label)
+            total_val_loss += loss.item()
+
+            preds = torch.argmax(output, dim=1)
+            correct_preds += (preds == label).sum().item()
+            total += label.size(0)
+
+        avg_val_loss = total_val_loss / len(val_loader)
+        val_acc = correct_preds / total
+        print(
+            f"Epochs: {epoch+1}/{EPOCHS} and validation loss = {avg_val_loss} | validation accuracy = {val_acc}"
+        )
+
+    if avg_val_loss < best_val_loss:
+        best_val_loss = avg_val_loss
+        torch.save(model.state_dict(), "checkpoints/best_model.pt")
